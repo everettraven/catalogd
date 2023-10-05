@@ -37,12 +37,12 @@ func (i *ImageRegistry) Unpack(ctx context.Context, catalog *catalogdv1alpha1.Ca
 	}
 
 	if catalog.Spec.Source.Image == nil {
-		return nil, catalogderrors.NewUnrecoverableError(fmt.Errorf("error parsing catalog, catalog %s has a nil image source", catalog.Name))
+		return nil, catalogderrors.NewUnrecoverable(fmt.Errorf("error parsing catalog, catalog %s has a nil image source", catalog.Name))
 	}
 
 	imgRef, err := name.ParseReference(catalog.Spec.Source.Image.Ref)
 	if err != nil {
-		return nil, catalogderrors.NewUnrecoverableError(fmt.Errorf("error parsing image reference: %w", err))
+		return nil, catalogderrors.NewUnrecoverable(fmt.Errorf("error parsing image reference: %w", err))
 	}
 
 	remoteOpts := []remote.Option{}
@@ -129,12 +129,12 @@ func unpackImage(ctx context.Context, imgRef name.Reference, unpackPath string, 
 
 	cfgFile, err := img.ConfigFile()
 	if err != nil {
-		return catalogderrors.NewUnrecoverableError(fmt.Errorf("error parsing remote image %q config file: %w", imgRef.Name(), err))
+		return catalogderrors.NewUnrecoverable(fmt.Errorf("error parsing remote image %q config file: %w", imgRef.Name(), err))
 	}
 
 	dirToUnpack, ok := cfgFile.Config.Labels[ConfigDirLabel]
 	if !ok {
-		return catalogderrors.NewUnrecoverableError(fmt.Errorf("catalog image %q is missing the required label %q", imgRef.String(), ConfigDirLabel))
+		return catalogderrors.NewUnrecoverable(fmt.Errorf("catalog image %q is missing the required label %q", imgRef.String(), ConfigDirLabel))
 	}
 
 	layers, err := img.Layers()

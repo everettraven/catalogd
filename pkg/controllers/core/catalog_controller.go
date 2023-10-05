@@ -70,7 +70,7 @@ func (r *CatalogReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	reconciledCatsrc := existingCatsrc.DeepCopy()
 	res, reconcileErr := r.reconcile(ctx, reconciledCatsrc)
 
-	if errors.As(reconcileErr, &catalogderrors.UnrecoverableError{}) {
+	if errors.As(reconcileErr, &catalogderrors.Unrecoverable{}) {
 		reconcileErr = nil
 	}
 

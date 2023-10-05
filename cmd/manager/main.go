@@ -205,13 +205,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := unpackStartupGarbageCollection(context.Background(), filepath.Join(cacheDir, source.UnpackCacheDir), setupLog, metaClient); err != nil {
+	ctx := ctrl.SetupSignalHandler()
+	if err := unpackStartupGarbageCollection(ctx, filepath.Join(cacheDir, source.UnpackCacheDir), setupLog, metaClient); err != nil {
 		setupLog.Error(err, "running garbage collection")
 		os.Exit(1)
 	}
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}

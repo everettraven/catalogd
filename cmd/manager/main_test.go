@@ -7,12 +7,13 @@ import (
 	"testing"
 
 	"github.com/go-logr/logr"
-	"github.com/operator-framework/catalogd/api/core/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/metadata/fake"
+
+	"github.com/operator-framework/catalogd/api/core/v1alpha1"
 )
 
 func TestUnpackStartupGarbageCollection(t *testing.T) {

@@ -20,7 +20,6 @@ CATALOGD_NAMESPACE      ?= catalogd-system
 
 # E2E configuration
 TESTDATA_DIR            ?= testdata
-CONTAINER_RUNTIME       ?= docker
 
 ##@ General
 

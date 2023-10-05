@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: catalogd-e2e
+  labels:
+    catalogd-registry: "true"
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: my-selfsigned-ca
+  namespace: catalogd-e2e
+spec:
+  isCA: true
+  secretName: root-secret
+  dnsNames:
+    - docker-registry.catalogd-e2e.svc
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned-issuer
+    kind: ClusterIssuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: my-ca-issuer
+  namespace: catalogd-e2e
+spec:
+  ca:
+    secretName: root-secret
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: docker-registry-pod
+  namespace: catalogd-e2e
+  labels:
+    app: registry
+spec:
+  containers:
+  - name: registry
+    image: registry:2
+    volumeMounts:
+    - name: certs-vol
+      mountPath: "/certs"
+    env:
+    - name: REGISTRY_HTTP_TLS_CERTIFICATE
+      value: "/certs/tls.crt"
+    - name: REGISTRY_HTTP_TLS_KEY
+      value: "/certs/tls.key"
+  volumes:
+    - name: certs-vol
+      secret:
+        secretName: root-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: docker-registry
+  namespace: catalogd-e2e
+spec:
+  selector:
+    app: registry
+  ports:
+  - port: 5000
+    targetPort: 5000

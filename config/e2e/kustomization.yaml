@@ -1,0 +1,43 @@
+# Adds namespace to all resources.
+namespace: catalogd-system
+
+# Value of this field is prepended to the
+# names of all resources, e.g. a deployment named
+# "wordpress" becomes "alices-wordpress".
+# Note that it should also match with the prefix (text before '-') of the namespace
+# field above.
+namePrefix: catalogd-
+
+# the following config is for teaching kustomize how to do var substitution
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+- ../crd
+- ../rbac
+- ../manager
+
+patches:
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: controller-manager
+        namespace: system
+      spec:
+        template:
+          spec:
+            containers:
+              - name: manager
+                volumeMounts:
+                  - mountPath: /etc/ssl/certs/
+                    name: ca-certs
+                    readOnly: true
+            volumes:
+              - name: ca-certs
+                configMap:
+                  name: docker-registry.catalogd-e2e.svc
+                  defaultMode: 0644
+                  optional: false
+                  items:
+                    - key: ca-certificates.crt
+                      path: ca-certificates.crt

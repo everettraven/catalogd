@@ -20,7 +20,7 @@ CATALOGD_NAMESPACE      ?= catalogd-system
 
 # E2E configuration
 TESTDATA_DIR            ?= testdata
-CONTAINER_RUNTIME ?= docker
+CONTAINER_RUNTIME       ?= docker
 
 ##@ General
 
@@ -67,7 +67,10 @@ test-e2e: $(GINKGO) ## Run the e2e tests
 	$(GINKGO) --tags $(GO_BUILD_TAGS) $(E2E_FLAGS) -trace -progress $(FOCUS) test/e2e
 
 e2e: KIND_CLUSTER_NAME=catalogd-e2e
-e2e: run kind-load-test-artifacts test-e2e kind-cluster-cleanup ## Run e2e test suite on local kind cluster
+e2e: kind-cluster setup-e2e image-registry wait test-e2e kind-cluster-cleanup ## Run e2e test suite on local kind cluster
+
+image-registry: ## Setup in-cluster image registry
+	./test/tools/imageregistry/registry.sh
 
 .PHONY: tidy
 tidy: ## Update dependencies
@@ -127,6 +130,14 @@ $(LINUX_BINARIES):
 .PHONY: run
 run: generate kind-cluster install ## Create a kind cluster and install a local build of catalogd
 
+.PHONY: setup-e2e
+setup-e2e: generate build-container kind-load deploy-e2e
+
+.PHONY: deploy-e2e
+deploy-e2e: $(KUSTOMIZE) ## Deploy Catalogd to the K8s cluster specified in ~/.kube/config.
+	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMAGE)
+	$(KUSTOMIZE) build config/e2e | kubectl apply -f -
+
 .PHONY: build-container
 build-container: build-linux ## Build docker image for catalogd.
 	docker build -f Dockerfile -t $(IMAGE) bin/linux
@@ -146,10 +157,6 @@ kind-cluster-cleanup: $(KIND) ## Delete the kind cluster
 kind-load: $(KIND) ## Load the built images onto the local cluster
 	$(KIND) export kubeconfig --name $(KIND_CLUSTER_NAME)
 	$(KIND) load docker-image $(IMAGE) --name $(KIND_CLUSTER_NAME)
-
-kind-load-test-artifacts: $(KIND) ## Load the e2e testdata container images into a kind cluster
-	$(CONTAINER_RUNTIME) build $(TESTDATA_DIR)/catalogs -f $(TESTDATA_DIR)/catalogs/test-catalog.Dockerfile -t localhost/testdata/catalogs/test-catalog:e2e
-	$(KIND) load docker-image localhost/testdata/catalogs/test-catalog:e2e --name $(KIND_CLUSTER_NAME)
 
 .PHONY: install
 install: build-container kind-load deploy wait ## Install local catalogd

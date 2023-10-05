@@ -36,7 +36,7 @@ func catalogImageRef() string {
 		return s
 	}
 
-	return "localhost/testdata/catalogs/test-catalog:e2e"
+	return "docker-registry.catalogd-e2e.svc:5000/test-catalog:e2e"
 }
 
 var _ = Describe("Catalog Unpacking", func() {

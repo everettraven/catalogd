@@ -123,7 +123,7 @@ func list(schema, pkg, name, catalogName string) error {
 			}
 
 			outMd := strings.Builder{}
-			outMd.WriteString(fmt.Sprintf("**%s** ", meta.Schema))
+			outMd.WriteString(fmt.Sprintf("`%s` **%s** ", catalog.Name, meta.Schema))
 			if meta.Package != "" {
 				outMd.WriteString(fmt.Sprintf("_%s_ ", meta.Package))
 			}

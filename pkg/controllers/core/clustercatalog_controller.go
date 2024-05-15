@@ -132,13 +132,17 @@ func (r *ClusterCatalogReconciler) reconcile(ctx context.Context, catalog *v1alp
 		controllerutil.RemoveFinalizer(catalog, fbcDeletionFinalizer)
 		return ctrl.Result{}, nil
 	}
-	// if ResolvedSource is not nil, it indicates that this is not the first time we're
-	// unpacking this catalog.
-	if catalog.Status.ResolvedSource != nil {
+	// if the Storage mechanism has this ClusterCatalog stored, it has successfully gone through
+	// an initial reconciliation. We should ensure the contentURL is up to date and check
+	// whether or not we need to unpack again based on the ClusterCatalog's polling configuration
+	if r.Storage.HasCatalog(catalog.Name) {
+		// always make sure contentURL is up to date
+		catalog.Status.ContentURL = r.Storage.ContentURL(catalog.Name)
 		if !unpackAgain(catalog) {
 			return ctrl.Result{}, nil
 		}
 	}
+
 	unpackResult, err := r.Unpacker.Unpack(ctx, catalog)
 	if err != nil {
 		return ctrl.Result{}, updateStatusUnpackFailing(&catalog.Status, fmt.Errorf("source bundle content: %v", err))

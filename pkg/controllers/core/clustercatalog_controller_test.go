@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	catalogdv1alpha1 "github.com/operator-framework/catalogd/api/core/v1alpha1"
@@ -51,16 +53,37 @@ var _ storage.Instance = &MockStore{}
 
 type MockStore struct {
 	shouldError bool
+	stored      sets.Set[string]
+	mu          *sync.Mutex
 }
 
-func (m MockStore) Store(_ string, _ fs.FS) error {
+func NewMockStore(shouldError bool) *MockStore {
+	return &MockStore{
+		shouldError: shouldError,
+		stored:      sets.Set[string](sets.NewString()),
+		mu:          &sync.Mutex{},
+	}
+}
+
+func (m MockStore) Store(s string, _ fs.FS) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.shouldError {
 		return errors.New("mockstore store error")
 	}
+	m.stored.Insert(s)
 	return nil
 }
 
+func (m MockStore) HasCatalog(name string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.stored.Has(name)
+}
+
 func (m MockStore) Delete(_ string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.shouldError {
 		return errors.New("mockstore delete error")
 	}
@@ -87,7 +110,7 @@ func TestCatalogdControllerReconcile(t *testing.T) {
 		{
 			name:   "invalid source type, returns error",
 			source: &MockSource{},
-			store:  &MockStore{},
+			store:  NewMockStore(false),
 			catalog: &catalogdv1alpha1.ClusterCatalog{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "catalog",
@@ -127,7 +150,7 @@ func TestCatalogdControllerReconcile(t *testing.T) {
 			source: &MockSource{
 				result: &source.Result{State: source.StatePending},
 			},
-			store: &MockStore{},
+			store: NewMockStore(false),
 			catalog: &catalogdv1alpha1.ClusterCatalog{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "catalog",
@@ -172,7 +195,7 @@ func TestCatalogdControllerReconcile(t *testing.T) {
 			source: &MockSource{
 				result: &source.Result{State: source.StateUnpacking},
 			},
-			store: &MockStore{},
+			store: NewMockStore(false),
 			catalog: &catalogdv1alpha1.ClusterCatalog{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "catalog",
@@ -218,7 +241,7 @@ func TestCatalogdControllerReconcile(t *testing.T) {
 			source: &MockSource{
 				result: &source.Result{State: "unknown"},
 			},
-			store: &MockStore{},
+			store: NewMockStore(false),
 			catalog: &catalogdv1alpha1.ClusterCatalog{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "catalog",
@@ -264,7 +287,7 @@ func TestCatalogdControllerReconcile(t *testing.T) {
 			source: &MockSource{
 				shouldError: true,
 			},
-			store: &MockStore{},
+			store: NewMockStore(false),
 			catalog: &catalogdv1alpha1.ClusterCatalog{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "catalog",
@@ -312,7 +335,7 @@ func TestCatalogdControllerReconcile(t *testing.T) {
 					FS:    &fstest.MapFS{},
 				},
 			},
-			store: &MockStore{},
+			store: NewMockStore(false),
 			catalog: &catalogdv1alpha1.ClusterCatalog{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "catalog",
@@ -362,9 +385,7 @@ func TestCatalogdControllerReconcile(t *testing.T) {
 					FS:    &fstest.MapFS{},
 				},
 			},
-			store: &MockStore{
-				shouldError: true,
-			},
+			store: NewMockStore(true),
 			catalog: &catalogdv1alpha1.ClusterCatalog{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "catalog",
@@ -407,7 +428,7 @@ func TestCatalogdControllerReconcile(t *testing.T) {
 		{
 			name:   "storage finalizer not set, storage finalizer gets set",
 			source: &MockSource{},
-			store:  &MockStore{},
+			store:  NewMockStore(false),
 			catalog: &catalogdv1alpha1.ClusterCatalog{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "catalog",
@@ -439,7 +460,7 @@ func TestCatalogdControllerReconcile(t *testing.T) {
 		{
 			name:   "storage finalizer set, catalog deletion timestamp is not zero (or nil), finalizer removed",
 			source: &MockSource{},
-			store:  &MockStore{},
+			store:  NewMockStore(false),
 			catalog: &catalogdv1alpha1.ClusterCatalog{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "catalog",
@@ -475,9 +496,7 @@ func TestCatalogdControllerReconcile(t *testing.T) {
 			name:      "storage finalizer set, catalog deletion timestamp is not zero (or nil), storage delete failed, error returned and finalizer not removed",
 			shouldErr: true,
 			source:    &MockSource{},
-			store: &MockStore{
-				shouldError: true,
-			},
+			store:     NewMockStore(true),
 			catalog: &catalogdv1alpha1.ClusterCatalog{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "catalog",
@@ -596,7 +615,7 @@ func TestPollingRequeue(t *testing.T) {
 						}},
 					},
 				),
-				Storage: &MockStore{},
+				Storage: NewMockStore(false),
 			}
 			res, _ := reconciler.reconcile(context.Background(), tc.catalog)
 			assert.GreaterOrEqual(t, res.RequeueAfter, tc.expectedRequeueAfter)
@@ -611,6 +630,7 @@ func TestPollingReconcilerUnpack(t *testing.T) {
 	for name, tc := range map[string]struct {
 		catalog           *catalogdv1alpha1.ClusterCatalog
 		expectedUnpackRun bool
+		resolvedBefore    bool
 	}{
 		"ClusterCatalog being resolved the first time, unpack should run": {
 			catalog: &catalogdv1alpha1.ClusterCatalog{
@@ -629,6 +649,7 @@ func TestPollingReconcilerUnpack(t *testing.T) {
 				},
 			},
 			expectedUnpackRun: true,
+			resolvedBefore:    false,
 		},
 		"ClusterCatalog not being resolved the first time, no pollInterval mentioned, unpack should not run": {
 			catalog: &catalogdv1alpha1.ClusterCatalog{
@@ -667,6 +688,7 @@ func TestPollingReconcilerUnpack(t *testing.T) {
 				},
 			},
 			expectedUnpackRun: false,
+			resolvedBefore:    true,
 		},
 		"ClusterCatalog not being resolved the first time, pollInterval mentioned, \"now\" is before next expected poll time, unpack should not run": {
 			catalog: &catalogdv1alpha1.ClusterCatalog{
@@ -706,6 +728,7 @@ func TestPollingReconcilerUnpack(t *testing.T) {
 				},
 			},
 			expectedUnpackRun: false,
+			resolvedBefore:    true,
 		},
 		"ClusterCatalog not being resolved the first time, pollInterval mentioned, \"now\" is after next expected poll time, unpack should run": {
 			catalog: &catalogdv1alpha1.ClusterCatalog{
@@ -745,6 +768,7 @@ func TestPollingReconcilerUnpack(t *testing.T) {
 				},
 			},
 			expectedUnpackRun: true,
+			resolvedBefore:    true,
 		},
 		"ClusterCatalog not being resolved the first time, pollInterval mentioned, \"now\" is before next expected poll time, spec.image changed, unpack should run": {
 			catalog: &catalogdv1alpha1.ClusterCatalog{
@@ -784,13 +808,17 @@ func TestPollingReconcilerUnpack(t *testing.T) {
 				},
 			},
 			expectedUnpackRun: true,
+			resolvedBefore:    true,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			reconciler := &ClusterCatalogReconciler{
 				Client:   nil,
 				Unpacker: &MockSource{shouldError: true},
-				Storage:  &MockStore{},
+				Storage:  NewMockStore(false),
+			}
+			if tc.resolvedBefore {
+				reconciler.Storage.Store(tc.catalog.Name, nil)
 			}
 			_, err := reconciler.reconcile(context.Background(), tc.catalog)
 			if tc.expectedUnpackRun {

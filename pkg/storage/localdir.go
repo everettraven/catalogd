@@ -45,6 +45,15 @@ func (s LocalDir) Store(catalog string, fsys fs.FS) error {
 	return os.Rename(tempFile.Name(), fbcFile)
 }
 
+func (s LocalDir) HasCatalog(catalog string) bool {
+	catalogFile := filepath.Join(s.RootDir, catalog, "all.json")
+	if _, err := os.Stat(catalogFile); err != nil {
+		// TODO: should probably be more explicit here
+		return false
+	}
+	return true
+}
+
 func (s LocalDir) Delete(catalog string) error {
 	return os.RemoveAll(filepath.Join(s.RootDir, catalog))
 }
